@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Content</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>View Content</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Content ID</th>
+                <th>Title</th>
+                <th>Text</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for content in content_list %}
+            <tr>
+                <td>{{ content._id }}</td>
+                <td>{{ content.title }}</td>
+                <td>{{ content.text[:100] }}{% if content.text|length > 100 %}...{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <a href="{{ url_for('index') }}">Back to Home</a>
+</body>
+</html>
