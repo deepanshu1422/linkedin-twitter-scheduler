@@ -8,14 +8,19 @@ from dotenv import load_dotenv
 import logging
 import requests
 
+# Load environment variables
 load_dotenv()
-logging.basicConfig(level=logging.ERROR)  # Changed to ERROR level
 
+# Configure logging
+logging.basicConfig(level=logging.ERROR)
+
+# Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY')
 
 # MongoDB connection
-client = MongoClient(os.environ.get('MONGO_URI'))
+MONGO_URI = os.environ.get('MONGO_URI')
+client = MongoClient(MONGO_URI)
 db = client['content_database']
 collection = db['posts']
 
@@ -34,7 +39,6 @@ def generate_and_post():
         return jsonify({'error': 'Content not found'}), 404
     
     try:
-
         image_url = generate_image(content['text'])
         # Post to LinkedIn
         linkedin_result = post_to_linkedin(content['text'], image_url)
@@ -110,4 +114,5 @@ def test_linkedin_profile():
         return jsonify({'success': False, 'error': 'Failed to fetch LinkedIn URN'}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # This is used when running locally. Gunicorn uses the app variable directly
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
