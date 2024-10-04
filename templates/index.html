@@ -5,75 +5,130 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Content Scheduler</title>
     <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2c3e50;
+            --background-color: #ecf0f1;
+            --text-color: #34495e;
+            --border-color: #bdc3c7;
+        }
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Arial', sans-serif;
             line-height: 1.6;
             margin: 0;
-            padding: 20px;
-            background-color: #f4f4f4;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
         }
         .container {
-            max-width: 1000px;
-            margin: auto;
-            overflow: hidden;
-            padding: 0 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
         }
-        h1 {
-            color: #333;
+        h1, h2 {
+            color: var(--secondary-color);
             text-align: center;
         }
         form {
             background: #fff;
             padding: 20px;
             margin-bottom: 20px;
-            border-radius: 5px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        textarea, input[type="date"], input[type="time"] {
-            width: 100%;
-            padding: 8px;
-            margin-bottom: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        input[type="submit"] {
-            display: block;
+        textarea, input[type="submit"] {
             width: 100%;
             padding: 10px;
-            background: #333;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="submit"] {
+            background-color: var(--primary-color);
             color: #fff;
             border: none;
-            border-radius: 4px;
             cursor: pointer;
+            transition: background-color 0.3s ease;
         }
         input[type="submit"]:hover {
-            background: #555;
+            background-color: #2980b9;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            background: #fff;
-            border-radius: 5px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 8px;
             overflow: hidden;
         }
         th, td {
-            text-align: left;
             padding: 12px;
-            border-bottom: 1px solid #ddd;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
         }
         th {
-            background-color: #333;
+            background-color: var(--secondary-color);
             color: #fff;
         }
-        tr:hover {
-            background-color: #f5f5f5;
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
         }
-        .actions a {
-            color: #333;
+        .post-text {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-width: 300px;
+        }
+        .post-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .post-actions a, .post-actions button {
+            padding: 8px 12px;
             text-decoration: none;
-            margin-right: 10px;
+            color: #fff;
+            border-radius: 4px;
+            transition: background-color 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
         }
-        .actions a:hover {
-            text-decoration: underline;
+        .post-actions a {
+            background-color: var(--secondary-color);
+        }
+        .post-actions a:hover {
+            background-color: #34495e;
+        }
+        .post-actions button {
+            background-color: var(--primary-color);
+        }
+        .post-actions button:hover {
+            background-color: #2980b9;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: none;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .log-container {
+            background-color: #f8f9fa;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
         }
     </style>
 </head>
@@ -82,27 +137,80 @@
         <h1>Content Scheduler</h1>
         
         <form method="POST">
-            <textarea name="text" rows="4" placeholder="Enter your content here" required></textarea>
+            <textarea name="text" rows="4" placeholder="Enter your post content here..." required></textarea>
             <input type="submit" value="Schedule Post">
         </form>
         
+        <h2>Scheduled Posts</h2>
         <table>
-            <tr>
-                <th>Text</th>
-                <th>Scheduled Time (IST)</th>
-                <th>Actions</th>
-            </tr>
-            {% for content in content_list %}
-            <tr>
-                <td>{{ content.text }}</td>
-                <td>{{ content.ist_time }}</td>
-                <td class="actions">
-                    <a href="{{ url_for('edit_content', content_id=content._id) }}">Edit</a>
-                    <a href="{{ url_for('delete_content', content_id=content._id) }}" onclick="return confirm('Are you sure you want to delete this post?');">Delete</a>
-                </td>
-            </tr>
-            {% endfor %}
+            <thead>
+                <tr>
+                    <th>Scheduled Time</th>
+                    <th>Content</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for content in content_list %}
+                <tr>
+                    <td>{{ content.ist_time }}</td>
+                    <td class="post-text">{{ content.text | safe }}</td>
+                    <td class="post-actions">
+                        <a href="{{ url_for('edit_content', content_id=content._id) }}">Edit</a>
+                        <a href="{{ url_for('delete_content', content_id=content._id) }}" onclick="return confirm('Are you sure you want to delete this post?');">Delete</a>
+                        <button onclick="generateAndPost('{{ content._id }}')">Generate and Post Now</button>
+                        <div class="loader" id="loader-{{ content._id }}"></div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3">
+                        <div class="log-container" id="log-{{ content._id }}"></div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
         </table>
     </div>
+
+    <script>
+        function generateAndPost(contentId) {
+            const loader = document.getElementById(`loader-${contentId}`);
+            const logContainer = document.getElementById(`log-${contentId}`);
+            const button = loader.previousElementSibling;
+
+            loader.style.display = 'inline-block';
+            button.disabled = true;
+            logContainer.style.display = 'block';
+            logContainer.innerHTML = 'Processing...';
+
+            fetch('{{ url_for("generate_and_post") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `content_id=${contentId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                loader.style.display = 'none';
+                button.disabled = false;
+                if (data.errors) {
+                    logContainer.innerHTML = `Errors occurred:<br>${data.errors.join('<br>')}`;
+                } else {
+                    logContainer.innerHTML = `
+                        Successfully posted:<br>
+                        LinkedIn: ${JSON.stringify(data.linkedin_result)}<br>
+                        Twitter: ${JSON.stringify(data.twitter_result)}<br>
+                        Image URL: ${data.image_url}
+                    `;
+                }
+            })
+            .catch(error => {
+                loader.style.display = 'none';
+                button.disabled = false;
+                logContainer.innerHTML = `An error occurred: ${error}`;
+            });
+        }
+    </script>
 </body>
 </html>

@@ -10,6 +10,7 @@ import requests
 from datetime import datetime, timedelta
 import pytz
 import sys
+import html
 
 # Load environment variables
 load_dotenv()
@@ -41,6 +42,9 @@ def index():
         text = request.form['text']
         logger.info(f"Received new post request: {text[:50]}...")
         
+        # Preserve line breaks by replacing them with <br> tags
+        text_with_breaks = text.replace('\n', '<br>')
+        
         # Find the next available slot
         post_datetime = find_next_available_slot()
         
@@ -49,7 +53,7 @@ def index():
         
         # Insert content into MongoDB
         result = collection.insert_one({
-            'text': text,
+            'text': text_with_breaks,
             'scheduled_time': utc_datetime
         })
         logger.info(f"Inserted new post with ID: {result.inserted_id}")
@@ -66,6 +70,8 @@ def index():
         utc_time = content['scheduled_time'].replace(tzinfo=pytz.UTC)
         ist_time = utc_time.astimezone(ist)
         content['ist_time'] = ist_time.strftime("%Y-%m-%d %I:%M %p IST")
+        # Convert <br> tags back to newlines for display
+        content['text'] = content['text'].replace('<br>', '\n')
     
     return render_template('index.html', content_list=content_list)
 
@@ -82,16 +88,18 @@ def generate_and_post():
         return jsonify({'error': 'Content not found'}), 404
     
     try:
-        logger.info(f"Generating image for content: {content['text'][:50]}...")
-        image_url = generate_image(content['text'])
+        # Convert <br> tags back to newlines for processing
+        text = content['text'].replace('<br>', '\n')
+        logger.info(f"Generating image for content: {text[:50]}...")
+        image_url = generate_image(text)
         logger.info(f"Image generated successfully: {image_url}")
 
         logger.info("Posting to LinkedIn...")
-        linkedin_result = post_to_linkedin(content['text'], image_url)
+        linkedin_result = post_to_linkedin(text, image_url)
         logger.info(f"LinkedIn post result: {linkedin_result}")
 
         logger.info("Posting to Twitter...")
-        twitter_result = post_to_twitter(content['text'], image_url)
+        twitter_result = post_to_twitter(text, image_url)
         logger.info(f"Twitter post result: {twitter_result}")
         
         errors = []
@@ -129,15 +137,20 @@ def edit_content(content_id):
         text = request.form['text']
         logger.info(f"Updating content: {text[:50]}...")
         
+        # Preserve line breaks by replacing them with <br> tags
+        text_with_breaks = text.replace('\n', '<br>')
+        
         result = collection.update_one(
             {'_id': ObjectId(content_id)},
-            {'$set': {'text': text}}
+            {'$set': {'text': text_with_breaks}}
         )
         logger.info(f"Update result: {result.modified_count} document(s) modified")
         return redirect(url_for('index'))
     
     ist = pytz.timezone('Asia/Kolkata')
     content['ist_time'] = content['scheduled_time'].replace(tzinfo=pytz.UTC).astimezone(ist).strftime("%Y-%m-%d %I:%M %p IST")
+    # Convert <br> tags back to newlines for editing
+    content['text'] = content['text'].replace('<br>', '\n')
     return render_template('edit_content.html', content=content)
 
 @app.route('/api/process_scheduled_posts', methods=['GET'])
@@ -163,16 +176,18 @@ def process_scheduled_posts():
     for post in scheduled_posts:
         logger.info(f"Processing post: {post['_id']}")
         try:
-            logger.info(f"Generating image for post: {post['text'][:50]}...")
-            image_url = generate_image(post['text'])
+            # Convert <br> tags back to newlines for processing
+            text = post['text'].replace('<br>', '\n')
+            logger.info(f"Generating image for post: {text[:50]}...")
+            image_url = generate_image(text)
             logger.info(f"Image generated: {image_url}")
 
             logger.info("Posting to LinkedIn...")
-            linkedin_result = post_to_linkedin(post['text'], image_url)
+            linkedin_result = post_to_linkedin(text, image_url)
             logger.info(f"LinkedIn result: {linkedin_result}")
 
             logger.info("Posting to Twitter...")
-            twitter_result = post_to_twitter(post['text'], image_url)
+            twitter_result = post_to_twitter(text, image_url)
             logger.info(f"Twitter result: {twitter_result}")
             
             # Mark the post as posted
