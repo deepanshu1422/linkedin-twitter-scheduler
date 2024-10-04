@@ -9,12 +9,20 @@ import logging
 import requests
 from datetime import datetime, timedelta
 import pytz
+import sys
 
 # Load environment variables
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -28,8 +36,10 @@ collection = db['posts']
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    logger.info("Accessing index route")
     if request.method == 'POST':
         text = request.form['text']
+        logger.info(f"Received new post request: {text[:50]}...")
         
         # Find the next available slot
         post_datetime = find_next_available_slot()
@@ -42,11 +52,13 @@ def index():
             'text': text,
             'scheduled_time': utc_datetime
         })
+        logger.info(f"Inserted new post with ID: {result.inserted_id}")
         
         return redirect(url_for('index'))
 
     # Fetch all content from MongoDB, sorted by scheduled time
     content_list = list(collection.find().sort('scheduled_time', 1))
+    logger.info(f"Fetched {len(content_list)} posts from database")
     
     # Convert UTC times to IST for display
     ist = pytz.timezone('Asia/Kolkata')
@@ -60,20 +72,27 @@ def index():
 @app.route('/generate_and_post', methods=['POST'])
 def generate_and_post():
     content_id = request.form['content_id']
+    logger.info(f"Received generate_and_post request for content ID: {content_id}")
     
     # Fetch content from MongoDB
     content = collection.find_one({'_id': ObjectId(content_id)})
     
     if not content:
+        logger.error(f"Content not found for ID: {content_id}")
         return jsonify({'error': 'Content not found'}), 404
     
     try:
+        logger.info(f"Generating image for content: {content['text'][:50]}...")
         image_url = generate_image(content['text'])
-        # Post to LinkedIn
-        linkedin_result = post_to_linkedin(content['text'], image_url)
+        logger.info(f"Image generated successfully: {image_url}")
 
-        # Post to Twitter
+        logger.info("Posting to LinkedIn...")
+        linkedin_result = post_to_linkedin(content['text'], image_url)
+        logger.info(f"LinkedIn post result: {linkedin_result}")
+
+        logger.info("Posting to Twitter...")
         twitter_result = post_to_twitter(content['text'], image_url)
+        logger.info(f"Twitter post result: {twitter_result}")
         
         errors = []
         if 'error' in linkedin_result:
@@ -82,32 +101,39 @@ def generate_and_post():
             errors.append(f"Twitter error: {twitter_result['error']}")
         
         if errors:
+            logger.error(f"Errors occurred during posting: {errors}")
             return jsonify({'errors': errors}), 500
         
+        logger.info("Successfully posted to both LinkedIn and Twitter")
         return jsonify({
             'linkedin_result': linkedin_result,
             'twitter_result': twitter_result,
             'image_url': image_url
         })
     except Exception as e:
-        logging.error(f"Error in generate_and_post: {str(e)}")
+        logger.error(f"Error in generate_and_post: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/delete_content/<content_id>')
 def delete_content(content_id):
-    collection.delete_one({'_id': ObjectId(content_id)})
+    logger.info(f"Deleting content with ID: {content_id}")
+    result = collection.delete_one({'_id': ObjectId(content_id)})
+    logger.info(f"Delete result: {result.deleted_count} document(s) deleted")
     return redirect(url_for('index'))
 
 @app.route('/edit_content/<content_id>', methods=['GET', 'POST'])
 def edit_content(content_id):
+    logger.info(f"Accessing edit_content route for content ID: {content_id}")
     content = collection.find_one({'_id': ObjectId(content_id)})
     if request.method == 'POST':
         text = request.form['text']
+        logger.info(f"Updating content: {text[:50]}...")
         
-        collection.update_one(
+        result = collection.update_one(
             {'_id': ObjectId(content_id)},
             {'$set': {'text': text}}
         )
+        logger.info(f"Update result: {result.modified_count} document(s) modified")
         return redirect(url_for('index'))
     
     ist = pytz.timezone('Asia/Kolkata')
@@ -116,6 +142,7 @@ def edit_content(content_id):
 
 @app.route('/api/process_scheduled_posts', methods=['GET'])
 def process_scheduled_posts():
+    logger.info("Processing scheduled posts")
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
     
@@ -123,6 +150,7 @@ def process_scheduled_posts():
     start_of_hour = now.replace(minute=0, second=0, microsecond=0)
     end_of_hour = start_of_hour + timedelta(hours=1)
     
+    logger.info(f"Searching for posts scheduled between {start_of_hour} and {end_of_hour} IST")
     scheduled_posts = collection.find({
         'scheduled_time': {
             '$gte': start_of_hour.astimezone(pytz.UTC),
@@ -133,13 +161,22 @@ def process_scheduled_posts():
     
     results = []
     for post in scheduled_posts:
+        logger.info(f"Processing post: {post['_id']}")
         try:
+            logger.info(f"Generating image for post: {post['text'][:50]}...")
             image_url = generate_image(post['text'])
+            logger.info(f"Image generated: {image_url}")
+
+            logger.info("Posting to LinkedIn...")
             linkedin_result = post_to_linkedin(post['text'], image_url)
+            logger.info(f"LinkedIn result: {linkedin_result}")
+
+            logger.info("Posting to Twitter...")
             twitter_result = post_to_twitter(post['text'], image_url)
+            logger.info(f"Twitter result: {twitter_result}")
             
             # Mark the post as posted
-            collection.update_one(
+            update_result = collection.update_one(
                 {'_id': post['_id']},
                 {'$set': {'posted': True, 'post_results': {
                     'linkedin': linkedin_result,
@@ -147,6 +184,7 @@ def process_scheduled_posts():
                     'image_url': image_url
                 }}}
             )
+            logger.info(f"Post marked as posted. Update result: {update_result.modified_count} document(s) modified")
             
             results.append({
                 'post_id': str(post['_id']),
@@ -155,16 +193,18 @@ def process_scheduled_posts():
                 'twitter': twitter_result
             })
         except Exception as e:
-            logging.error(f"Error processing scheduled post {post['_id']}: {str(e)}")
+            logger.error(f"Error processing scheduled post {post['_id']}: {str(e)}", exc_info=True)
             results.append({
                 'post_id': str(post['_id']),
                 'status': 'error',
                 'error': str(e)
             })
     
+    logger.info(f"Processed {len(results)} scheduled posts")
     return jsonify(results)
 
 def find_next_available_slot():
+    logger.info("Finding next available slot")
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
     slot_times = [10, 17, 21]  # 10 AM, 5 PM, 9 PM
@@ -176,9 +216,11 @@ def find_next_available_slot():
             if slot <= now:
                 continue
             if not collection.find_one({'scheduled_time': slot.astimezone(pytz.UTC)}):
+                logger.info(f"Next available slot found: {slot}")
                 return slot
         current_date += timedelta(days=1)
 
 if __name__ == '__main__':
     # This is used when running locally. Gunicorn uses the app variable directly
+    logger.info("Starting Flask application")
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
