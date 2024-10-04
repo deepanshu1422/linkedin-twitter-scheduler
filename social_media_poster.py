@@ -8,17 +8,26 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# LinkedIn credentials
 LINKEDIN_ACCESS_TOKEN = os.environ.get('LINKEDIN_ACCESS_TOKEN')
+LINKEDIN_ACCESS_TOKEN_2 = os.environ.get('LINKEDIN_ACCESS_TOKEN_2')
 
+# Twitter credentials for first account
 TWITTER_API_KEY = os.environ.get('TWITTER_API_KEY')
 TWITTER_API_SECRET = os.environ.get('TWITTER_API_SECRET')
 TWITTER_ACCESS_TOKEN = os.getenv('TWITTER_ACCESS_TOKEN')
 TWITTER_ACCESS_TOKEN_SECRET = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
 
-def get_linkedin_person_urn():
+# Twitter credentials for second account
+TWITTER_API_KEY_2 = os.environ.get('TWITTER_API_KEY_2')
+TWITTER_API_SECRET_2 = os.environ.get('TWITTER_API_SECRET_2')
+TWITTER_ACCESS_TOKEN_2 = os.getenv('TWITTER_ACCESS_TOKEN_2')
+TWITTER_ACCESS_TOKEN_SECRET_2 = os.getenv('TWITTER_ACCESS_TOKEN_SECRET_2')
+
+def get_linkedin_person_urn(token):
     url = 'https://api.linkedin.com/v2/userinfo'
     headers = {
-        'Authorization': f'Bearer {LINKEDIN_ACCESS_TOKEN}',
+        'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json'
     }
     
@@ -43,16 +52,16 @@ def get_linkedin_person_urn():
         logging.error(f"Response content: {response.text}")
         return None
 
-def register_image_with_linkedin(image_url):
+def register_image_with_linkedin(image_url, token):
     register_url = 'https://api.linkedin.com/v2/assets?action=registerUpload'
     headers = {
-        'Authorization': f'Bearer {LINKEDIN_ACCESS_TOKEN}',
+        'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json'
     }
     data = {
         "registerUploadRequest": {
             "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-            "owner": get_linkedin_person_urn(),
+            "owner": get_linkedin_person_urn(token),
             "serviceRelationships": [{
                 "relationshipType": "OWNER",
                 "identifier": "urn:li:userGeneratedContent"
@@ -82,97 +91,117 @@ def register_image_with_linkedin(image_url):
         return None
 
 def post_to_linkedin(text, image_url):
-    url = 'https://api.linkedin.com/v2/ugcPosts'
-    headers = {
-        'Authorization': f'Bearer {LINKEDIN_ACCESS_TOKEN}',
-        'Content-Type': 'application/json'
-    }
-    
-    person_urn = get_linkedin_person_urn()
-    if not person_urn:
-        return {'error': 'Failed to fetch LinkedIn person URN'}
-    
-    asset_urn = register_image_with_linkedin(image_url)
-    if not asset_urn:
-        return {'error': 'Failed to register image with LinkedIn'}
-    
-    # Extract the digitalmediaAsset part from the asset_urn
-    asset_id = asset_urn.split(',')[0].split(':')[-1]
-    
-    data = {
-        'author': person_urn,
-        'lifecycleState': 'PUBLISHED',
-        'specificContent': {
-            'com.linkedin.ugc.ShareContent': {
-                'shareCommentary': {
-                    'text': text
-                },
-                'shareMediaCategory': 'IMAGE',
-                'media': [
-                    {
-                        'status': 'READY',
-                        'description': {
-                            'text': 'Image description'
-                        },
-                        'media': f'urn:li:digitalmediaAsset:{asset_id}'
-                    }
-                ]
-            }
-        },
-        'visibility': {
-            'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC'
+    results = []
+    for token in [LINKEDIN_ACCESS_TOKEN, LINKEDIN_ACCESS_TOKEN_2]:
+        url = 'https://api.linkedin.com/v2/ugcPosts'
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json'
         }
-    }
+        
+        person_urn = get_linkedin_person_urn(token)
+        if not person_urn:
+            results.append({'error': 'Failed to fetch LinkedIn person URN'})
+            continue
+        
+        asset_urn = register_image_with_linkedin(image_url, token)
+        if not asset_urn:
+            results.append({'error': 'Failed to register image with LinkedIn'})
+            continue
+        
+        # Extract the digitalmediaAsset part from the asset_urn
+        asset_id = asset_urn.split(',')[0].split(':')[-1]
+        
+        # Replace <br> tags with \n for LinkedIn
+        linkedin_text = text.replace('<br>', '\n')
+        
+        data = {
+            'author': person_urn,
+            'lifecycleState': 'PUBLISHED',
+            'specificContent': {
+                'com.linkedin.ugc.ShareContent': {
+                    'shareCommentary': {
+                        'text': linkedin_text
+                    },
+                    'shareMediaCategory': 'IMAGE',
+                    'media': [
+                        {
+                            'status': 'READY',
+                            'description': {
+                                'text': 'Image description'
+                            },
+                            'media': f'urn:li:digitalmediaAsset:{asset_id}'
+                        }
+                    ]
+                }
+            },
+            'visibility': {
+                'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC'
+            }
+        }
+        
+        response = requests.post(url, headers=headers, json=data)
+        logging.info(f"LinkedIn post response status code: {response.status_code}")
+        logging.info(f"LinkedIn post response content: {response.text}")
+        
+        if response.status_code == 201:
+            try:
+                results.append(response.json())
+            except json.JSONDecodeError:
+                logging.error("Failed to decode JSON from LinkedIn post response")
+                results.append({'error': 'Failed to decode LinkedIn response'})
+        else:
+            logging.error(f"Failed to post to LinkedIn. Status code: {response.status_code}")
+            logging.error(f"Response content: {response.text}")
+            results.append({'error': f'Failed to post to LinkedIn: {response.text}'})
     
-    response = requests.post(url, headers=headers, json=data)
-    logging.info(f"LinkedIn post response status code: {response.status_code}")
-    logging.info(f"LinkedIn post response content: {response.text}")
-    
-    if response.status_code == 201:
-        try:
-            return response.json()
-        except json.JSONDecodeError:
-            logging.error("Failed to decode JSON from LinkedIn post response")
-            return {'error': 'Failed to decode LinkedIn response'}
-    else:
-        logging.error(f"Failed to post to LinkedIn. Status code: {response.status_code}")
-        logging.error(f"Response content: {response.text}")
-        return {'error': f'Failed to post to LinkedIn: {response.text}'}
+    return results
 
 def post_to_twitter(text, image_url=None):
-    try:
-        client = tweepy.Client(
-            consumer_key=TWITTER_API_KEY,
-            consumer_secret=TWITTER_API_SECRET,
-            access_token=TWITTER_ACCESS_TOKEN,
-            access_token_secret=TWITTER_ACCESS_TOKEN_SECRET
-        )
+    results = []
+    for credentials in [
+        (TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET),
+        (TWITTER_API_KEY_2, TWITTER_API_SECRET_2, TWITTER_ACCESS_TOKEN_2, TWITTER_ACCESS_TOKEN_SECRET_2)
+    ]:
+        try:
+            api_key, api_secret, access_token, access_token_secret = credentials
+            client = tweepy.Client(
+                consumer_key=api_key,
+                consumer_secret=api_secret,
+                access_token=access_token,
+                access_token_secret=access_token_secret
+            )
 
-        # Truncate the text to 140 characters
-        truncated_text = text[:140]
+            # Replace <br> tags with \n for Twitter
+            twitter_text = text.replace('<br>', '\n')
 
-        if image_url:
-            # Download image
-            image_response = requests.get(image_url)
-            if image_response.status_code != 200:
-                raise Exception(f"Failed to download image from URL. Status code: {image_response.status_code}")
+            # Truncate the text to 280 characters (Twitter's current limit)
+            truncated_text = twitter_text[:280]
+
+            if image_url:
+                # Download image
+                image_response = requests.get(image_url)
+                if image_response.status_code != 200:
+                    raise Exception(f"Failed to download image from URL. Status code: {image_response.status_code}")
+                
+                # Create a file-like object from the image content
+                image_file = io.BytesIO(image_response.content)
+                
+                # Upload image
+                auth = tweepy.OAuthHandler(api_key, api_secret)
+                auth.set_access_token(access_token, access_token_secret)
+                api = tweepy.API(auth)
+                media = api.media_upload(filename="temp_image.jpg", file=image_file)
+                
+                # Post tweet with image
+                response = client.create_tweet(text=truncated_text, media_ids=[media.media_id])
+            else:
+                # Post tweet without image
+                response = client.create_tweet(text=truncated_text)
             
-            # Create a file-like object from the image content
-            image_file = io.BytesIO(image_response.content)
-            
-            # Upload image
-            auth = tweepy.OAuthHandler(TWITTER_API_KEY, TWITTER_API_SECRET)
-            auth.set_access_token(TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET)
-            api = tweepy.API(auth)
-            media = api.media_upload(filename="temp_image.jpg", file=image_file)
-            
-            # Post tweet with image
-            response = client.create_tweet(text=truncated_text, media_ids=[media.media_id])
-        else:
-            # Post tweet without image
-            response = client.create_tweet(text=truncated_text)
-        
-        return {'tweet_id': response.data['id']}
-    except Exception as e:
-        logging.error(f"Error posting to Twitter: {str(e)}")
-        return {'error': f'Error posting to Twitter: {str(e)}'}
+            results.append({'tweet_id': response.data['id']})
+        except Exception as e:
+            logging.error(f"Error posting to Twitter: {str(e)}")
+            results.append({'error': f'Error posting to Twitter: {str(e)}'})
+    
+    return results

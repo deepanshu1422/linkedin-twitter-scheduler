@@ -3,187 +3,218 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Content Scheduler</title>
+    <title>Schedule Content</title>
     <style>
-        :root {
-            --primary-color: #3498db;
-            --secondary-color: #2c3e50;
-            --background-color: #ecf0f1;
-            --text-color: #34495e;
-            --border-color: #bdc3c7;
-        }
         body {
-            font-family: 'Arial', sans-serif;
+            font-family: Arial, sans-serif;
             line-height: 1.6;
-            margin: 0;
-            padding: 0;
-            background-color: var(--background-color);
-            color: var(--text-color);
-        }
-        .container {
+            color: #333;
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
+            background-color: #f4f4f4;
         }
         h1, h2 {
-            color: var(--secondary-color);
-            text-align: center;
+            color: #2c3e50;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .status-Success {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .status-Error {
+            color: #c0392b;
+            font-weight: bold;
+        }
+        .status-Scheduled {
+            color: #2980b9;
+            font-weight: bold;
+        }
+        .status-Partial {
+            color: #f39c12;
+            font-weight: bold;
         }
         form {
-            background: #fff;
-            padding: 20px;
             margin-bottom: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
         }
-        textarea, input[type="submit"] {
+        textarea {
             width: 100%;
             padding: 10px;
             margin-bottom: 10px;
-            border: 1px solid var(--border-color);
+            border: 1px solid #ddd;
             border-radius: 4px;
-            box-sizing: border-box;
         }
         input[type="submit"] {
-            background-color: var(--primary-color);
-            color: #fff;
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
             border: none;
             cursor: pointer;
-            transition: background-color 0.3s ease;
+            border-radius: 4px;
         }
         input[type="submit"]:hover {
             background-color: #2980b9;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: #fff;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color);
-        }
-        th {
-            background-color: var(--secondary-color);
-            color: #fff;
-        }
-        tr:nth-child(even) {
-            background-color: #f8f9fa;
-        }
-        .post-text {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            max-width: 300px;
-        }
-        .post-actions {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .post-actions a, .post-actions button {
-            padding: 8px 12px;
+        a {
+            color: #3498db;
             text-decoration: none;
-            color: #fff;
-            border-radius: 4px;
-            transition: background-color 0.3s ease;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .platform-status {
+            display: flex;
+            flex-direction: column;
+        }
+        .account-status {
+            margin-bottom: 5px;
+        }
+        @media (max-width: 768px) {
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            thead tr {
+                position: absolute;
+                top: -9999px;
+                left: -9999px;
+            }
+            tr {
+                margin-bottom: 15px;
+            }
+            td {
+                border: none;
+                position: relative;
+                padding-left: 50%;
+            }
+            td:before {
+                position: absolute;
+                top: 6px;
+                left: 6px;
+                width: 45%;
+                padding-right: 10px;
+                white-space: nowrap;
+                content: attr(data-label);
+                font-weight: bold;
+            }
+        }
+        .post-now-btn {
+            background-color: #2ecc71;
+            color: white;
+            padding: 5px 10px;
             border: none;
             cursor: pointer;
-            font-size: 14px;
-        }
-        .post-actions a {
-            background-color: var(--secondary-color);
-        }
-        .post-actions a:hover {
-            background-color: #34495e;
-        }
-        .post-actions button {
-            background-color: var(--primary-color);
-        }
-        .post-actions button:hover {
-            background-color: #2980b9;
-        }
-        .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid var(--primary-color);
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-            display: none;
-            margin-left: 10px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .log-container {
-            background-color: #f8f9fa;
-            border: 1px solid var(--border-color);
             border-radius: 4px;
+        }
+        .post-now-btn:hover {
+            background-color: #27ae60;
+        }
+        #logArea {
+            width: 100%;
+            height: 200px;
+            margin-top: 20px;
             padding: 10px;
-            margin-top: 10px;
-            max-height: 200px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
             overflow-y: auto;
-            display: none;
+            background-color: #f9f9f9;
+        }
+        .post-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Content Scheduler</h1>
-        
-        <form method="POST">
-            <textarea name="text" rows="4" placeholder="Enter your post content here..." required></textarea>
-            <input type="submit" value="Schedule Post">
-        </form>
-        
-        <h2>Scheduled Posts</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Scheduled Time</th>
-                    <th>Content</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for content in content_list %}
-                <tr>
-                    <td>{{ content.ist_time }}</td>
-                    <td class="post-text">{{ content.text | safe }}</td>
-                    <td class="post-actions">
-                        <a href="{{ url_for('edit_content', content_id=content._id) }}">Edit</a>
-                        <a href="{{ url_for('delete_content', content_id=content._id) }}" onclick="return confirm('Are you sure you want to delete this post?');">Delete</a>
-                        <button onclick="generateAndPost('{{ content._id }}')">Generate and Post Now</button>
-                        <div class="loader" id="loader-{{ content._id }}"></div>
-                    </td>
-                </tr>
-                <tr>
-                    <td colspan="3">
-                        <div class="log-container" id="log-{{ content._id }}"></div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <h1>Schedule New Content</h1>
+    <form method="POST">
+        <textarea name="text" rows="4" cols="50" required></textarea><br>
+        <input type="submit" value="Schedule Post">
+    </form>
+
+    <h2>Scheduled Content</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Text</th>
+                <th>Scheduled Time (IST)</th>
+                <th>Status</th>
+                <th>LinkedIn Status</th>
+                <th>Twitter Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for content in content_list %}
+            <tr>
+                <td data-label="Text">
+                    <div class="post-content">{{ content.text }}</div>
+                </td>
+                <td data-label="Scheduled Time">{{ content.ist_time }}</td>
+                <td data-label="Status" class="status-{{ content.status.split()[0] }}">{{ content.status }}</td>
+                <td data-label="LinkedIn Status">
+                    <div class="platform-status">
+                        {% if content.post_results and content.post_results.linkedin %}
+                            <span class="account-status">Account 1: <span class="status-{{ content.post_results.linkedin.get('account_1', 'Error') }}">{{ content.post_results.linkedin.get('account_1', 'Error') }}</span></span>
+                            <span class="account-status">Account 2: <span class="status-{{ content.post_results.linkedin.get('account_2', 'Error') }}">{{ content.post_results.linkedin.get('account_2', 'Error') }}</span></span>
+                        {% else %}
+                            Not posted yet
+                        {% endif %}
+                    </div>
+                </td>
+                <td data-label="Twitter Status">
+                    <div class="platform-status">
+                        {% if content.post_results and content.post_results.twitter %}
+                            <span class="account-status">Account 1: <span class="status-{{ content.post_results.twitter.get('account_1', 'Error') }}">{{ content.post_results.twitter.get('account_1', 'Error') }}</span></span>
+                            <span class="account-status">Account 2: <span class="status-{{ content.post_results.twitter.get('account_2', 'Error') }}">{{ content.post_results.twitter.get('account_2', 'Error') }}</span></span>
+                        {% else %}
+                            Not posted yet
+                        {% endif %}
+                    </div>
+                </td>
+                <td data-label="Actions">
+                    <a href="{{ url_for('edit_content', content_id=content._id) }}">Edit</a>
+                    <a href="{{ url_for('delete_content', content_id=content._id) }}" onclick="return confirm('Are you sure you want to delete this post?');">Delete</a>
+                    {% if content.status == 'Scheduled' %}
+                        <button class="post-now-btn" onclick="postNow('{{ content._id }}')">Post Now</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Posting Logs</h2>
+    <div id="logArea"></div>
 
     <script>
-        function generateAndPost(contentId) {
-            const loader = document.getElementById(`loader-${contentId}`);
-            const logContainer = document.getElementById(`log-${contentId}`);
-            const button = loader.previousElementSibling;
-
-            loader.style.display = 'inline-block';
-            button.disabled = true;
-            logContainer.style.display = 'block';
-            logContainer.innerHTML = 'Processing...';
-
-            fetch('{{ url_for("generate_and_post") }}', {
+        function postNow(contentId) {
+            const logArea = document.getElementById('logArea');
+            logArea.innerHTML = '<p>Posting process started...</p>';
+            
+            fetch('/generate_and_post', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -192,24 +223,41 @@
             })
             .then(response => response.json())
             .then(data => {
-                loader.style.display = 'none';
-                button.disabled = false;
-                if (data.errors) {
-                    logContainer.innerHTML = `Errors occurred:<br>${data.errors.join('<br>')}`;
-                } else {
-                    logContainer.innerHTML = `
-                        Successfully posted:<br>
-                        LinkedIn: ${JSON.stringify(data.linkedin_result)}<br>
-                        Twitter: ${JSON.stringify(data.twitter_result)}<br>
-                        Image URL: ${data.image_url}
-                    `;
-                }
+                console.log(data);
+                updateLogArea(data);
+                // Reload the page after posting
+                setTimeout(() => location.reload(), 3000);
             })
-            .catch(error => {
-                loader.style.display = 'none';
-                button.disabled = false;
-                logContainer.innerHTML = `An error occurred: ${error}`;
+            .catch((error) => {
+                console.error('Error:', error);
+                updateLogArea({error: 'An error occurred while posting.'});
             });
+        }
+
+        function updateLogArea(data) {
+            const logArea = document.getElementById('logArea');
+            if (data.error) {
+                logArea.innerHTML += `<p style="color: red;">Error: ${data.error}</p>`;
+            } else {
+                logArea.innerHTML += `<p>Posting process completed with status: ${data.status}</p>`;
+                if (data.linkedin_results) {
+                    logArea.innerHTML += '<p>LinkedIn results:</p>';
+                    data.linkedin_results.forEach((result, index) => {
+                        const status = result.id ? 'Success' : 'Error';
+                        const message = result.id ? result.id : result.error;
+                        logArea.innerHTML += `<p>Account ${index + 1}: ${status} - ${message}</p>`;
+                    });
+                }
+                if (data.twitter_results) {
+                    logArea.innerHTML += '<p>Twitter results:</p>';
+                    data.twitter_results.forEach((result, index) => {
+                        const status = result.tweet_id ? 'Success' : 'Error';
+                        const message = result.tweet_id ? result.tweet_id : result.error;
+                        logArea.innerHTML += `<p>Account ${index + 1}: ${status} - ${message}</p>`;
+                    });
+                }
+            }
+            logArea.scrollTop = logArea.scrollHeight;
         }
     </script>
 </body>

@@ -10,7 +10,6 @@ import requests
 from datetime import datetime, timedelta
 import pytz
 import sys
-import html
 
 # Load environment variables
 load_dotenv()
@@ -42,8 +41,8 @@ def index():
         text = request.form['text']
         logger.info(f"Received new post request: {text[:50]}...")
         
-        # Preserve line breaks by replacing them with <br> tags
-        text_with_breaks = text.replace('\n', '<br>')
+        # Store the text as-is, without replacing newlines
+        text_to_store = text
         
         # Find the next available slot
         post_datetime = find_next_available_slot()
@@ -53,8 +52,9 @@ def index():
         
         # Insert content into MongoDB
         result = collection.insert_one({
-            'text': text_with_breaks,
-            'scheduled_time': utc_datetime
+            'text': text_to_store,
+            'scheduled_time': utc_datetime,
+            'status': 'Scheduled'  # Set initial status
         })
         logger.info(f"Inserted new post with ID: {result.inserted_id}")
         
@@ -70,8 +70,7 @@ def index():
         utc_time = content['scheduled_time'].replace(tzinfo=pytz.UTC)
         ist_time = utc_time.astimezone(ist)
         content['ist_time'] = ist_time.strftime("%Y-%m-%d %I:%M %p IST")
-        # Convert <br> tags back to newlines for display
-        content['text'] = content['text'].replace('<br>', '\n')
+        content['status'] = content.get('status', 'Scheduled')
     
     return render_template('index.html', content_list=content_list)
 
@@ -88,34 +87,48 @@ def generate_and_post():
         return jsonify({'error': 'Content not found'}), 404
     
     try:
-        # Convert <br> tags back to newlines for processing
-        text = content['text'].replace('<br>', '\n')
+        # Use the text as-is
+        text = content['text']
         logger.info(f"Generating image for content: {text[:50]}...")
         image_url = generate_image(text)
         logger.info(f"Image generated successfully: {image_url}")
 
         logger.info("Posting to LinkedIn...")
-        linkedin_result = post_to_linkedin(text, image_url)
-        logger.info(f"LinkedIn post result: {linkedin_result}")
+        linkedin_results = post_to_linkedin(text, image_url)
+        logger.info(f"LinkedIn post results: {linkedin_results}")
 
         logger.info("Posting to Twitter...")
-        twitter_result = post_to_twitter(text, image_url)
-        logger.info(f"Twitter post result: {twitter_result}")
+        twitter_results = post_to_twitter(text, image_url)
+        logger.info(f"Twitter post results: {twitter_results}")
         
-        errors = []
-        if 'error' in linkedin_result:
-            errors.append(f"LinkedIn error: {linkedin_result['error']}")
-        if 'error' in twitter_result:
-            errors.append(f"Twitter error: {twitter_result['error']}")
+        # Prepare detailed status information
+        linkedin_status = {f"account_{i+1}": "Success" if 'id' in result else "Error" for i, result in enumerate(linkedin_results)}
+        twitter_status = {f"account_{i+1}": "Success" if 'tweet_id' in result else "Error" for i, result in enumerate(twitter_results)}
         
-        if errors:
-            logger.error(f"Errors occurred during posting: {errors}")
-            return jsonify({'errors': errors}), 500
+        # Fix: Convert dict_values to list before concatenation
+        all_statuses = list(linkedin_status.values()) + list(twitter_status.values())
+        overall_status = 'Partial Success' if any(status == 'Success' for status in all_statuses) else 'Error'
+        if all(status == 'Success' for status in all_statuses):
+            overall_status = 'Success'
         
-        logger.info("Successfully posted to both LinkedIn and Twitter")
+        # Update the post status
+        update_result = collection.update_one(
+            {'_id': ObjectId(content_id)},
+            {'$set': {
+                'status': overall_status,
+                'post_results': {
+                    'linkedin': linkedin_status,
+                    'twitter': twitter_status,
+                    'image_url': image_url
+                }
+            }}
+        )
+        logger.info(f"Post status updated. Update result: {update_result.modified_count} document(s) modified")
+        
         return jsonify({
-            'linkedin_result': linkedin_result,
-            'twitter_result': twitter_result,
+            'status': overall_status,
+            'linkedin_results': linkedin_results,
+            'twitter_results': twitter_results,
             'image_url': image_url
         })
     except Exception as e:
@@ -137,20 +150,16 @@ def edit_content(content_id):
         text = request.form['text']
         logger.info(f"Updating content: {text[:50]}...")
         
-        # Preserve line breaks by replacing them with <br> tags
-        text_with_breaks = text.replace('\n', '<br>')
-        
+        # Store the text as-is, without replacing newlines
         result = collection.update_one(
             {'_id': ObjectId(content_id)},
-            {'$set': {'text': text_with_breaks}}
+            {'$set': {'text': text}}
         )
         logger.info(f"Update result: {result.modified_count} document(s) modified")
         return redirect(url_for('index'))
     
     ist = pytz.timezone('Asia/Kolkata')
     content['ist_time'] = content['scheduled_time'].replace(tzinfo=pytz.UTC).astimezone(ist).strftime("%Y-%m-%d %I:%M %p IST")
-    # Convert <br> tags back to newlines for editing
-    content['text'] = content['text'].replace('<br>', '\n')
     return render_template('edit_content.html', content=content)
 
 @app.route('/api/process_scheduled_posts', methods=['GET'])
@@ -159,59 +168,69 @@ def process_scheduled_posts():
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
     
-    # Find posts scheduled for the current hour
-    start_of_hour = now.replace(minute=0, second=0, microsecond=0)
-    end_of_hour = start_of_hour + timedelta(hours=1)
-    
-    logger.info(f"Searching for posts scheduled between {start_of_hour} and {end_of_hour} IST")
+    # Find posts scheduled for the current time or earlier
+    logger.info(f"Searching for posts scheduled up to {now} IST")
     scheduled_posts = collection.find({
-        'scheduled_time': {
-            '$gte': start_of_hour.astimezone(pytz.UTC),
-            '$lt': end_of_hour.astimezone(pytz.UTC)
-        },
-        'posted': {'$ne': True}
+        'scheduled_time': {'$lte': now.astimezone(pytz.UTC)},
+        'status': 'Scheduled'  # Only process posts that are still scheduled
     })
     
     results = []
     for post in scheduled_posts:
         logger.info(f"Processing post: {post['_id']}")
         try:
-            # Convert <br> tags back to newlines for processing
-            text = post['text'].replace('<br>', '\n')
+            # Use the text as-is
+            text = post['text']
             logger.info(f"Generating image for post: {text[:50]}...")
             image_url = generate_image(text)
             logger.info(f"Image generated: {image_url}")
 
             logger.info("Posting to LinkedIn...")
-            linkedin_result = post_to_linkedin(text, image_url)
-            logger.info(f"LinkedIn result: {linkedin_result}")
+            linkedin_results = post_to_linkedin(text, image_url)
+            logger.info(f"LinkedIn results: {linkedin_results}")
 
             logger.info("Posting to Twitter...")
-            twitter_result = post_to_twitter(text, image_url)
-            logger.info(f"Twitter result: {twitter_result}")
+            twitter_results = post_to_twitter(text, image_url)
+            logger.info(f"Twitter results: {twitter_results}")
             
-            # Mark the post as posted
+            # Prepare detailed status information
+            linkedin_status = {f"account_{i+1}": "Success" if 'id' in result else "Error" for i, result in enumerate(linkedin_results)}
+            twitter_status = {f"account_{i+1}": "Success" if 'tweet_id' in result else "Error" for i, result in enumerate(twitter_results)}
+            
+            overall_status = 'Partial Success' if any(status == 'Success' for status in linkedin_status.values() + twitter_status.values()) else 'Error'
+            if all(status == 'Success' for status in linkedin_status.values() + twitter_status.values()):
+                overall_status = 'Success'
+            
+            # Update the post status
             update_result = collection.update_one(
                 {'_id': post['_id']},
-                {'$set': {'posted': True, 'post_results': {
-                    'linkedin': linkedin_result,
-                    'twitter': twitter_result,
-                    'image_url': image_url
-                }}}
+                {'$set': {
+                    'status': overall_status,
+                    'post_results': {
+                        'linkedin': linkedin_status,
+                        'twitter': twitter_status,
+                        'image_url': image_url
+                    }
+                }}
             )
-            logger.info(f"Post marked as posted. Update result: {update_result.modified_count} document(s) modified")
+            logger.info(f"Post status updated. Update result: {update_result.modified_count} document(s) modified")
             
             results.append({
                 'post_id': str(post['_id']),
-                'status': 'success',
-                'linkedin': linkedin_result,
-                'twitter': twitter_result
+                'status': overall_status,
+                'linkedin': linkedin_status,
+                'twitter': twitter_status
             })
         except Exception as e:
             logger.error(f"Error processing scheduled post {post['_id']}: {str(e)}", exc_info=True)
+            # Update the post status to indicate an error
+            collection.update_one(
+                {'_id': post['_id']},
+                {'$set': {'status': 'Error'}}
+            )
             results.append({
                 'post_id': str(post['_id']),
-                'status': 'error',
+                'status': 'Error',
                 'error': str(e)
             })
     
