@@ -114,6 +114,56 @@ def edit_content(content_id):
     content['ist_time'] = content['scheduled_time'].replace(tzinfo=pytz.UTC).astimezone(ist).strftime("%Y-%m-%d %I:%M %p IST")
     return render_template('edit_content.html', content=content)
 
+@app.route('/api/process_scheduled_posts', methods=['GET'])
+def process_scheduled_posts():
+    ist = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(ist)
+    
+    # Find posts scheduled for the current hour
+    start_of_hour = now.replace(minute=0, second=0, microsecond=0)
+    end_of_hour = start_of_hour + timedelta(hours=1)
+    
+    scheduled_posts = collection.find({
+        'scheduled_time': {
+            '$gte': start_of_hour.astimezone(pytz.UTC),
+            '$lt': end_of_hour.astimezone(pytz.UTC)
+        },
+        'posted': {'$ne': True}
+    })
+    
+    results = []
+    for post in scheduled_posts:
+        try:
+            image_url = generate_image(post['text'])
+            linkedin_result = post_to_linkedin(post['text'], image_url)
+            twitter_result = post_to_twitter(post['text'], image_url)
+            
+            # Mark the post as posted
+            collection.update_one(
+                {'_id': post['_id']},
+                {'$set': {'posted': True, 'post_results': {
+                    'linkedin': linkedin_result,
+                    'twitter': twitter_result,
+                    'image_url': image_url
+                }}}
+            )
+            
+            results.append({
+                'post_id': str(post['_id']),
+                'status': 'success',
+                'linkedin': linkedin_result,
+                'twitter': twitter_result
+            })
+        except Exception as e:
+            logging.error(f"Error processing scheduled post {post['_id']}: {str(e)}")
+            results.append({
+                'post_id': str(post['_id']),
+                'status': 'error',
+                'error': str(e)
+            })
+    
+    return jsonify(results)
+
 def find_next_available_slot():
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)

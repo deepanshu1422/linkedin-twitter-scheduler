@@ -15,5 +15,11 @@
   ],
   "env": {
     "FLASK_ENV": "production"
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/process_scheduled_posts",
+      "schedule": "30 4,11,15 * * *"
+    }
+  ]
 }
