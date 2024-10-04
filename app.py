@@ -7,6 +7,8 @@ import os
 from dotenv import load_dotenv
 import logging
 import requests
+from datetime import datetime, timedelta
+import pytz
 
 # Load environment variables
 load_dotenv()
@@ -24,9 +26,36 @@ client = MongoClient(MONGO_URI)
 db = client['content_database']
 collection = db['posts']
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    return render_template('index.html')
+    if request.method == 'POST':
+        text = request.form['text']
+        
+        # Find the next available slot
+        post_datetime = find_next_available_slot()
+        
+        # Convert to UTC for storage
+        utc_datetime = post_datetime.astimezone(pytz.UTC)
+        
+        # Insert content into MongoDB
+        result = collection.insert_one({
+            'text': text,
+            'scheduled_time': utc_datetime
+        })
+        
+        return redirect(url_for('index'))
+
+    # Fetch all content from MongoDB, sorted by scheduled time
+    content_list = list(collection.find().sort('scheduled_time', 1))
+    
+    # Convert UTC times to IST for display
+    ist = pytz.timezone('Asia/Kolkata')
+    for content in content_list:
+        utc_time = content['scheduled_time'].replace(tzinfo=pytz.UTC)
+        ist_time = utc_time.astimezone(ist)
+        content['ist_time'] = ist_time.strftime("%Y-%m-%d %I:%M %p IST")
+    
+    return render_template('index.html', content_list=content_list)
 
 @app.route('/generate_and_post', methods=['POST'])
 def generate_and_post():
@@ -64,54 +93,41 @@ def generate_and_post():
         logging.error(f"Error in generate_and_post: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/insert_content', methods=['GET', 'POST'])
-def insert_content():
+@app.route('/delete_content/<content_id>')
+def delete_content(content_id):
+    collection.delete_one({'_id': ObjectId(content_id)})
+    return redirect(url_for('index'))
+
+@app.route('/edit_content/<content_id>', methods=['GET', 'POST'])
+def edit_content(content_id):
+    content = collection.find_one({'_id': ObjectId(content_id)})
     if request.method == 'POST':
-        title = request.form['title']
         text = request.form['text']
         
-        # Insert content into MongoDB
-        result = collection.insert_one({
-            'title': title,
-            'text': text
-        })
-        
+        collection.update_one(
+            {'_id': ObjectId(content_id)},
+            {'$set': {'text': text}}
+        )
         return redirect(url_for('index'))
     
-    return render_template('insert_content.html')
+    ist = pytz.timezone('Asia/Kolkata')
+    content['ist_time'] = content['scheduled_time'].replace(tzinfo=pytz.UTC).astimezone(ist).strftime("%Y-%m-%d %I:%M %p IST")
+    return render_template('edit_content.html', content=content)
 
-@app.route('/view_content')
-def view_content():
-    # Fetch all content from MongoDB
-    content_list = list(collection.find())
-    return render_template('view_content.html', content_list=content_list)
-
-@app.route('/get_linkedin_profile')
-def get_linkedin_profile():
-    url = 'https://api.linkedin.com/v2/me'
-    headers = {
-        'Authorization': f'Bearer {os.environ.get("LINKEDIN_ACCESS_TOKEN")}',
-        'Content-Type': 'application/json'
-    }
+def find_next_available_slot():
+    ist = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(ist)
+    slot_times = [10, 17, 21]  # 10 AM, 5 PM, 9 PM
     
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()  # This will raise an exception for HTTP errors
-        profile_data = response.json()
-        person_urn = profile_data.get('id')
-        return jsonify({'person_urn': f'urn:li:person:{person_urn}'})
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Failed to fetch LinkedIn profile: {str(e)}")
-        return jsonify({'error': f'Failed to fetch LinkedIn profile: {str(e)}'}), 400
-
-@app.route('/test_linkedin_profile')
-def test_linkedin_profile():
-    from social_media_poster import get_linkedin_person_urn
-    urn = get_linkedin_person_urn()
-    if urn:
-        return jsonify({'success': True, 'linkedin_urn': urn})
-    else:
-        return jsonify({'success': False, 'error': 'Failed to fetch LinkedIn URN'}), 400
+    current_date = now.date()
+    while True:
+        for hour in slot_times:
+            slot = ist.localize(datetime.combine(current_date, datetime.min.time().replace(hour=hour)))
+            if slot <= now:
+                continue
+            if not collection.find_one({'scheduled_time': slot.astimezone(pytz.UTC)}):
+                return slot
+        current_date += timedelta(days=1)
 
 if __name__ == '__main__':
     # This is used when running locally. Gunicorn uses the app variable directly
