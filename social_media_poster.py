@@ -4,13 +4,16 @@ import tweepy
 import logging
 import io
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 LINKEDIN_ACCESS_TOKEN = os.environ.get('LINKEDIN_ACCESS_TOKEN')
 
 TWITTER_API_KEY = os.environ.get('TWITTER_API_KEY')
 TWITTER_API_SECRET = os.environ.get('TWITTER_API_SECRET')
-TWITTER_ACCESS_TOKEN = os.environ.get('TWITTER_ACCESS_TOKEN')
-TWITTER_ACCESS_TOKEN_SECRET = os.environ.get('TWITTER_ACCESS_TOKEN_SECRET')
+TWITTER_ACCESS_TOKEN = os.getenv('TWITTER_ACCESS_TOKEN')
+TWITTER_ACCESS_TOKEN_SECRET = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
 
 def get_linkedin_person_urn():
     url = 'https://api.linkedin.com/v2/userinfo'
@@ -136,7 +139,7 @@ def post_to_linkedin(text, image_url):
         logging.error(f"Response content: {response.text}")
         return {'error': f'Failed to post to LinkedIn: {response.text}'}
 
-def post_to_twitter(text, image_url):
+def post_to_twitter(text, image_url=None):
     try:
         client = tweepy.Client(
             consumer_key=TWITTER_API_KEY,
@@ -144,28 +147,29 @@ def post_to_twitter(text, image_url):
             access_token=TWITTER_ACCESS_TOKEN,
             access_token_secret=TWITTER_ACCESS_TOKEN_SECRET
         )
-        
-        # Download image
-        image_response = requests.get(image_url)
-        if image_response.status_code != 200:
-            raise Exception(f"Failed to download image from URL. Status code: {image_response.status_code}")
-        
-        # Create a file-like object from the image content
-        image_file = io.BytesIO(image_response.content)
-        
-        # Upload image
-        auth = tweepy.OAuthHandler(TWITTER_API_KEY, TWITTER_API_SECRET)
-        auth.set_access_token(TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET)
-        api = tweepy.API(auth)
-        media = api.media_upload(filename="temp_image.jpg", file=image_file)
-        
-        # Post tweet with image
-        response = client.create_tweet(text=text, media_ids=[media.media_id])
+
+        if image_url:
+            # Download image
+            image_response = requests.get(image_url)
+            if image_response.status_code != 200:
+                raise Exception(f"Failed to download image from URL. Status code: {image_response.status_code}")
+            
+            # Create a file-like object from the image content
+            image_file = io.BytesIO(image_response.content)
+            
+            # Upload image
+            auth = tweepy.OAuthHandler(TWITTER_API_KEY, TWITTER_API_SECRET)
+            auth.set_access_token(TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET)
+            api = tweepy.API(auth)
+            media = api.media_upload(filename="temp_image.jpg", file=image_file)
+            
+            # Post tweet with image
+            response = client.create_tweet(text=text, media_ids=[media.media_id])
+        else:
+            # Post tweet without image
+            response = client.create_tweet(text=text)
         
         return {'tweet_id': response.data['id']}
-    except tweepy.TweepError as e:
-        logging.error(f"Twitter API error: {str(e)}")
-        return {'error': f'Twitter API error: {str(e)}'}
     except Exception as e:
         logging.error(f"Error posting to Twitter: {str(e)}")
         return {'error': f'Error posting to Twitter: {str(e)}'}
