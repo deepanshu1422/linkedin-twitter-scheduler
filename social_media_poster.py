@@ -148,6 +148,9 @@ def post_to_twitter(text, image_url=None):
             access_token_secret=TWITTER_ACCESS_TOKEN_SECRET
         )
 
+        # Truncate the text to 140 characters
+        truncated_text = text[:140]
+
         if image_url:
             # Download image
             image_response = requests.get(image_url)
@@ -164,10 +167,10 @@ def post_to_twitter(text, image_url=None):
             media = api.media_upload(filename="temp_image.jpg", file=image_file)
             
             # Post tweet with image
-            response = client.create_tweet(text=text, media_ids=[media.media_id])
+            response = client.create_tweet(text=truncated_text, media_ids=[media.media_id])
         else:
             # Post tweet without image
-            response = client.create_tweet(text=text)
+            response = client.create_tweet(text=truncated_text)
         
         return {'tweet_id': response.data['id']}
     except Exception as e:

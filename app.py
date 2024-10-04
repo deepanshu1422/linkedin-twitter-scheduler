@@ -34,14 +34,11 @@ def generate_and_post():
         return jsonify({'error': 'Content not found'}), 404
     
     try:
-        # Generate image using Ideogram
-        # image_url = generate_image(content['text'])
 
-        image_url = "https://ideogram.ai/api/images/ephemeral/UuWdIFLGQpynI-2jGHzELA.png?exp=1728117358&sig=465e19ea36f4070190965e3fd4ac7219da0b9813c7844874417dccd3e609ef78"
-
+        image_url = generate_image(content['text'])
         # Post to LinkedIn
-        # linkedin_result = post_to_linkedin(content['text'], image_url)
-        linkedin_result = []
+        linkedin_result = post_to_linkedin(content['text'], image_url)
+
         # Post to Twitter
         twitter_result = post_to_twitter(content['text'], image_url)
         
