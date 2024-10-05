@@ -255,6 +255,5 @@ def find_next_available_slot():
         current_date += timedelta(days=1)
 
 if __name__ == '__main__':
-    # This is used when running locally. Gunicorn uses the app variable directly
-    logger.info("Starting Flask application")
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
