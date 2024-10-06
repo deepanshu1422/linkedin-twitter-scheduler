@@ -142,21 +142,14 @@ def generate_and_post():
         return jsonify({'error': 'Content not found'}), 404
     
     try:
+        # Use the original markdown text
         text = content['text']
-        # Convert markdown to plain text for social media posting
+        
+        # Convert markdown to HTML
         html_content = markdown.markdown(text)
         
-        # Remove HTML tags
-        plain_text = re.sub('<[^<]+?>', '', html_content)
-        
-        # Unescape HTML entities
-        plain_text = unescape(plain_text)
-        
-        # Replace multiple newlines with a single newline
-        plain_text = re.sub(r'\n+', '\n', plain_text)
-        
-        # Trim leading/trailing whitespace
-        plain_text = plain_text.strip()
+        # Convert HTML to plain text while preserving formatting
+        plain_text = html_to_plain_text(html_content)
         
         image_url = content.get('image_url')
         
@@ -186,7 +179,6 @@ def generate_and_post():
         linkedin_status = {f"account_{i+1}": "Success" if 'id' in result else "Error" for i, result in enumerate(linkedin_results)}
         twitter_status = {f"account_{i+1}": "Success" if 'tweet_id' in result else "Error" for i, result in enumerate(twitter_results)}
         
-        # Fix: Convert dict_values to list before concatenation
         all_statuses = list(linkedin_status.values()) + list(twitter_status.values())
         overall_status = 'Partial Success' if any(status == 'Success' for status in all_statuses) else 'Error'
         if all(status == 'Success' for status in all_statuses):
@@ -215,6 +207,26 @@ def generate_and_post():
     except Exception as e:
         logger.error(f"Error in generate_and_post: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+def html_to_plain_text(html_content):
+    # Replace <br> and </p> tags with newlines
+    text = re.sub(r'<br\s*/?>', '\n', html_content)
+    text = re.sub(r'</p>', '\n', text)
+    
+    # Replace <li> tags with bullet points
+    text = re.sub(r'<li>', '• ', text)
+    
+    # Remove all other HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    
+    # Unescape HTML entities
+    text = unescape(text)
+    
+    # Remove extra whitespace
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+    text = text.strip()
+    
+    return text
 
 @app.route('/delete_content/<content_id>')
 def delete_content(content_id):
