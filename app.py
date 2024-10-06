@@ -243,6 +243,10 @@ def trigger_cron():
     results = process_scheduled_posts()
     return jsonify(results)
 
+@app.route('/find_next_slot', methods=['GET'])
+def find_next_slot():
+    return jsonify({'next_slot': find_next_available_slot().isoformat()})
+
 def find_next_available_slot():
     logger.info("Finding next available slot")
     ist = pytz.timezone('Asia/Kolkata')
