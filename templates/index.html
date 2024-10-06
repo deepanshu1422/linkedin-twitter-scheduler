@@ -371,7 +371,7 @@
             {% for content in content_list %}
             <tr>
                 <td data-label="Text">
-                    <div class="post-content">{{ content.text }}</div>
+                    <div class="post-content">{{ content.display_text | safe }}</div>
                 </td>
                 <td data-label="Scheduled Time">{{ content.ist_time }}</td>
                 <td data-label="Status" class="status-{{ content.status.split()[0] }}">{{ content.status }}</td>

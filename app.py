@@ -13,6 +13,9 @@ import sys
 import boto3
 from botocore.exceptions import NoCredentialsError
 import uuid
+import markdown
+import re
+from html import unescape
 
 # Load environment variables
 load_dotenv()
@@ -93,17 +96,36 @@ def index():
         
         return redirect(url_for('index'))
 
-    # Fetch all content from MongoDB, sorted by scheduled time
-    content_list = list(collection.find().sort('scheduled_time', 1))
-    logger.info(f"Fetched {len(content_list)} posts from database")
+    # Fetch all content from MongoDB
+    all_content = list(collection.find())
     
-    # Convert UTC times to IST for display
+    # Separate scheduled and posted content
+    scheduled_content = []
+    posted_content = []
+    
     ist = pytz.timezone('Asia/Kolkata')
-    for content in content_list:
+    for content in all_content:
         utc_time = content['scheduled_time'].replace(tzinfo=pytz.UTC)
         ist_time = utc_time.astimezone(ist)
         content['ist_time'] = ist_time.strftime("%Y-%m-%d %I:%M %p IST")
         content['status'] = content.get('status', 'Scheduled')
+        content['display_text'] = markdown.markdown(content['text'])  # Convert markdown to HTML for display
+        
+        if content['status'] == 'Scheduled':
+            scheduled_content.append(content)
+        else:
+            posted_content.append(content)
+    
+    # Sort scheduled content by scheduled time
+    scheduled_content.sort(key=lambda x: x['scheduled_time'])
+    
+    # Sort posted content by scheduled time in reverse order (most recent first)
+    posted_content.sort(key=lambda x: x['scheduled_time'], reverse=True)
+    
+    # Combine the lists with scheduled content at the top and posted content at the bottom
+    content_list = scheduled_content + posted_content
+    
+    logger.info(f"Fetched {len(content_list)} posts from database")
     
     return render_template('index.html', content_list=content_list)
 
@@ -121,10 +143,25 @@ def generate_and_post():
     
     try:
         text = content['text']
+        # Convert markdown to plain text for social media posting
+        html_content = markdown.markdown(text)
+        
+        # Remove HTML tags
+        plain_text = re.sub('<[^<]+?>', '', html_content)
+        
+        # Unescape HTML entities
+        plain_text = unescape(plain_text)
+        
+        # Replace multiple newlines with a single newline
+        plain_text = re.sub(r'\n+', '\n', plain_text)
+        
+        # Trim leading/trailing whitespace
+        plain_text = plain_text.strip()
+        
         image_url = content.get('image_url')
         
         if not image_url:
-            prompt = content.get('image_prompt') or text
+            prompt = content.get('image_prompt') or plain_text
             logger.info(f"Generating image for content: {prompt[:50]}...")
             image_url = generate_image(prompt)
             logger.info(f"Image generated successfully: {image_url}")
@@ -138,11 +175,11 @@ def generate_and_post():
             logger.info(f"Using existing image: {image_url}")
 
         logger.info("Posting to LinkedIn...")
-        linkedin_results = post_to_linkedin(text, image_url)
+        linkedin_results = post_to_linkedin(plain_text, image_url)
         logger.info(f"LinkedIn post results: {linkedin_results}")
 
         logger.info("Posting to Twitter...")
-        twitter_results = post_to_twitter(text, image_url)
+        twitter_results = post_to_twitter(plain_text, image_url)
         logger.info(f"Twitter post results: {twitter_results}")
         
         # Prepare detailed status information
