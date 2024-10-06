@@ -247,10 +247,10 @@ def trigger_cron():
 def find_next_slot():
     return jsonify({'next_slot': find_next_available_slot().isoformat()})
 
-def find_next_available_slot():
+def find_next_available_slot(start_time=None):
     logger.info("Finding next available slot")
     ist = pytz.timezone('Asia/Kolkata')
-    now = datetime.now(ist)
+    now = start_time or datetime.now(ist)
     slot_times = [10, 17, 21]  # 10 AM, 5 PM, 9 PM
     
     current_date = now.date()
