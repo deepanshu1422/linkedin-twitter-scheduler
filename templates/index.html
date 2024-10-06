@@ -223,19 +223,136 @@
             text-decoration: none;
             cursor: pointer;
         }
+
+        #regenerateModal .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+        }
+
+        #regenerateModal input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        #regenerateModal button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            margin: 10px 5px;
+            border: none;
+            cursor: pointer;
+        }
+
+        #regenerateModal button:hover {
+            background-color: #45a049;
+        }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #regenerateLoader {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 10px;
+        }
+
+        #regenerateLoader::after {
+            content: "Regenerating image...";
+            margin-left: 10px;
+        }
     </style>
 </head>
 <body>
     <h1>Schedule New Content</h1>
-    <form method="POST" enctype="multipart/form-data">
+    <form method="POST" enctype="multipart/form-data" id="scheduleForm">
         <textarea name="text" rows="4" cols="50" required></textarea><br>
         <div class="file-input-wrapper">
-            <button class="btn-file-input">Choose Image</button>
-            <input type="file" name="image" accept="image/*" onchange="previewImage(this);">
+            <button type="button" class="btn-file-input" onclick="toggleImageOptions()">Choose Image</button>
+            <input type="file" name="image" accept="image/*" onchange="previewImage(this);" id="imageUpload" style="display:none;">
+        </div>
+        <div id="imageOptions" style="display:none;">
+            <input type="radio" id="uploadImage" name="imageOption" value="upload" checked>
+            <label for="uploadImage">Upload Image</label>
+            <input type="radio" id="generateImage" name="imageOption" value="generate">
+            <label for="generateImage">Generate Image</label>
         </div>
         <div id="imagePreview"></div>
+        <div id="promptInput">
+            <label for="imagePrompt">Image Generation Prompt (optional):</label>
+            <input type="text" id="imagePrompt" name="imagePrompt" placeholder="Enter prompt for image generation">
+        </div>
         <input type="submit" value="Schedule Post">
     </form>
+
+    <script>
+    function toggleImageOptions() {
+        var imageOptions = document.getElementById('imageOptions');
+        var imageUpload = document.getElementById('imageUpload');
+        
+        if (imageOptions.style.display === 'none') {
+            imageOptions.style.display = 'block';
+            imageUpload.style.display = 'block';
+        } else {
+            imageOptions.style.display = 'none';
+            imageUpload.style.display = 'none';
+        }
+    }
+
+    function previewImage(input) {
+        var preview = document.getElementById('imagePreview');
+        preview.innerHTML = '';
+        if (input.files && input.files[0]) {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var img = document.createElement('img');
+                img.src = e.target.result;
+                img.className = 'image-preview';
+                preview.appendChild(img);
+                var removeBtn = document.createElement('span');
+                removeBtn.innerHTML = 'Remove';
+                removeBtn.className = 'remove-image';
+                removeBtn.onclick = function() {
+                    input.value = '';
+                    preview.innerHTML = '';
+                };
+                preview.appendChild(removeBtn);
+            }
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    document.getElementById('scheduleForm').addEventListener('change', function(event) {
+        if (event.target.name === 'imageOption') {
+            var promptInput = document.getElementById('promptInput');
+            var imageUpload = document.getElementById('imageUpload');
+            if (event.target.value === 'generate') {
+                promptInput.style.display = 'block';
+                imageUpload.style.display = 'none';
+            } else {
+                promptInput.style.display = 'none';
+                imageUpload.style.display = 'block';
+            }
+        }
+    });
+    </script>
 
     <h2>Scheduled Content</h2>
     <table>
@@ -260,12 +377,13 @@
                 <td data-label="Status" class="status-{{ content.status.split()[0] }}">{{ content.status }}</td>
                 <td data-label="Image">
                     {% if content.image_url %}
-                        <span>{% if content.status == 'Scheduled' %}Uploaded{% else %}Generated{% endif %}</span>
                         <a href="#" onclick="viewImage('{{ content.image_url }}'); return false;">View</a>
                         <a href="{{ url_for('change_image', content_id=content._id) }}">Change</a>
+                        <a href="#" onclick="showRegeneratePrompt('{{ content._id }}'); return false;">Regenerate</a>
                         <a href="{{ url_for('remove_image', content_id=content._id) }}" onclick="return confirm('Are you sure you want to remove this image?');">Remove</a>
                     {% else %}
-                        <span>Will be generated</span>
+                        <span>No image</span>
+                        <a href="#" onclick="showRegeneratePrompt('{{ content._id }}'); return false;">Generate</a>
                     {% endif %}
                 </td>
                 <td data-label="LinkedIn Status">
@@ -355,31 +473,6 @@
         }
     </script>
 
-    <script>
-        function previewImage(input) {
-            var preview = document.getElementById('imagePreview');
-            preview.innerHTML = '';
-            if (input.files && input.files[0]) {
-                var reader = new FileReader();
-                reader.onload = function(e) {
-                    var img = document.createElement('img');
-                    img.src = e.target.result;
-                    img.className = 'image-preview';
-                    preview.appendChild(img);
-                    var removeBtn = document.createElement('span');
-                    removeBtn.innerHTML = 'Remove';
-                    removeBtn.className = 'remove-image';
-                    removeBtn.onclick = function() {
-                        input.value = '';
-                        preview.innerHTML = '';
-                    };
-                    preview.appendChild(removeBtn);
-                }
-                reader.readAsDataURL(input.files[0]);
-            }
-        }
-    </script>
-
     <!-- Add this modal for image preview -->
     <div id="imageModal" class="modal">
         <span class="close">&times;</span>
@@ -412,6 +505,69 @@
         window.onclick = function(event) {
             if (event.target == modal) {
                 modal.style.display = "none";
+            }
+        }
+    </script>
+
+    <!-- Add this modal for image regeneration -->
+    <div id="regenerateModal" class="modal">
+        <div class="modal-content">
+            <h2>Regenerate Image</h2>
+            <p>Enter a prompt to regenerate the image (leave blank to use the post text):</p>
+            <input type="text" id="regeneratePrompt" placeholder="Enter prompt">
+            <button onclick="regenerateImage()">Regenerate</button>
+            <button onclick="closeRegenerateModal()">Cancel</button>
+            <div id="regenerateLoader" class="loader" style="display: none;">Regenerating image...</div>
+        </div>
+    </div>
+
+    <script>
+        var regenerateModal = document.getElementById("regenerateModal");
+        var currentContentId = null;
+        var regenerateLoader = document.getElementById("regenerateLoader");
+
+        function showRegeneratePrompt(contentId) {
+            regenerateModal.style.display = "block";
+            currentContentId = contentId;
+        }
+
+        function closeRegenerateModal() {
+            regenerateModal.style.display = "none";
+            currentContentId = null;
+            regenerateLoader.style.display = "none";
+        }
+
+        function regenerateImage() {
+            var prompt = document.getElementById("regeneratePrompt").value;
+            regenerateLoader.style.display = "block";  // Show loader
+            fetch(`/regenerate_image/${currentContentId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `prompt=${encodeURIComponent(prompt)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                regenerateLoader.style.display = "none";  // Hide loader
+                if (data.success) {
+                    alert('Image regenerated successfully!');
+                    location.reload();
+                } else {
+                    alert('Error regenerating image: ' + data.error);
+                }
+            })
+            .catch(error => {
+                regenerateLoader.style.display = "none";  // Hide loader
+                console.error('Error:', error);
+                alert('An error occurred while regenerating the image.');
+            });
+        }
+
+        // Close the modal when clicking outside of it
+        window.onclick = function(event) {
+            if (event.target == regenerateModal) {
+                closeRegenerateModal();
             }
         }
     </script>

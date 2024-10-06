@@ -65,26 +65,29 @@ def index():
         text = request.form['text']
         logger.info(f"Received new post request: {text[:50]}...")
         
-        # Check if an image was uploaded
         image_url = None
-        if 'image' in request.files:
+        image_option = request.form.get('imageOption')
+        image_prompt = request.form.get('imagePrompt')
+        
+        if image_option == 'upload' and 'image' in request.files and request.files['image'].filename != '':
             image = request.files['image']
-            if image.filename != '':
-                image_url = upload_to_digitalocean(image)
-                logger.info(f"Image uploaded to DigitalOcean: {image_url}")
+            image_url = upload_to_digitalocean(image)
+            logger.info(f"Image uploaded to DigitalOcean: {image_url}")
+        elif image_option == 'generate' or image_prompt:
+            prompt = image_prompt or text
+            logger.info(f"Generating image with prompt: {prompt[:50]}...")
+            image_url = generate_image(prompt)
+            logger.info(f"Image generated successfully: {image_url}")
         
-        # Find the next available slot
         post_datetime = find_next_available_slot()
-        
-        # Convert to UTC for storage
         utc_datetime = post_datetime.astimezone(pytz.UTC)
         
-        # Insert content into MongoDB
         result = collection.insert_one({
             'text': text,
             'scheduled_time': utc_datetime,
             'status': 'Scheduled',
-            'image_url': image_url  # Store the image URL if uploaded
+            'image_url': image_url,
+            'image_prompt': image_prompt
         })
         logger.info(f"Inserted new post with ID: {result.inserted_id}")
         
@@ -121,8 +124,9 @@ def generate_and_post():
         image_url = content.get('image_url')
         
         if not image_url:
-            logger.info(f"Generating image for content: {text[:50]}...")
-            image_url = generate_image(text)
+            prompt = content.get('image_prompt') or text
+            logger.info(f"Generating image for content: {prompt[:50]}...")
+            image_url = generate_image(prompt)
             logger.info(f"Image generated successfully: {image_url}")
             
             # Update the content with the generated image URL
@@ -328,6 +332,33 @@ def remove_image(content_id):
     )
     logger.info(f"Image removed for content ID: {content_id}")
     return redirect(url_for('index'))
+
+@app.route('/regenerate_image/<content_id>', methods=['POST'])
+def regenerate_image(content_id):
+    content = collection.find_one({'_id': ObjectId(content_id)})
+    if not content:
+        return jsonify({'error': 'Content not found'}), 404
+    
+    prompt = request.form.get('prompt', content['text'])
+    try:
+        logger.info(f"Regenerating image for content ID: {content_id} with prompt: {prompt[:50]}...")
+        new_image_url = generate_image(prompt)
+        logger.info(f"New image generated: {new_image_url}")
+        
+        update_result = collection.update_one(
+            {'_id': ObjectId(content_id)},
+            {'$set': {'image_url': new_image_url}}
+        )
+        
+        if update_result.modified_count == 1:
+            logger.info(f"Image URL updated for content ID: {content_id}")
+            return jsonify({'success': True, 'new_image_url': new_image_url})
+        else:
+            logger.error(f"Failed to update image URL for content ID: {content_id}")
+            return jsonify({'error': 'Failed to update image URL'}), 500
+    except Exception as e:
+        logger.error(f"Error regenerating image: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
