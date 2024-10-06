@@ -145,12 +145,95 @@
             white-space: pre-wrap;
             word-wrap: break-word;
         }
+        
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input-wrapper input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+        }
+
+        .file-input-wrapper .btn-file-input {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .file-input-wrapper:hover .btn-file-input {
+            background-color: #2980b9;
+        }
+
+        .image-preview {
+            max-width: 200px;
+            max-height: 200px;
+            margin-top: 10px;
+        }
+
+        .remove-image {
+            color: #c0392b;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        /* Styles for the image modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            padding-top: 100px;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgb(0,0,0);
+            background-color: rgba(0,0,0,0.9);
+        }
+
+        .modal-content {
+            margin: auto;
+            display: block;
+            width: 80%;
+            max-width: 700px;
+        }
+
+        .close {
+            position: absolute;
+            top: 15px;
+            right: 35px;
+            color: #f1f1f1;
+            font-size: 40px;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: #bbb;
+            text-decoration: none;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
     <h1>Schedule New Content</h1>
-    <form method="POST">
+    <form method="POST" enctype="multipart/form-data">
         <textarea name="text" rows="4" cols="50" required></textarea><br>
+        <div class="file-input-wrapper">
+            <button class="btn-file-input">Choose Image</button>
+            <input type="file" name="image" accept="image/*" onchange="previewImage(this);">
+        </div>
+        <div id="imagePreview"></div>
         <input type="submit" value="Schedule Post">
     </form>
 
@@ -161,6 +244,7 @@
                 <th>Text</th>
                 <th>Scheduled Time (IST)</th>
                 <th>Status</th>
+                <th>Image</th>
                 <th>LinkedIn Status</th>
                 <th>Twitter Status</th>
                 <th>Actions</th>
@@ -174,6 +258,16 @@
                 </td>
                 <td data-label="Scheduled Time">{{ content.ist_time }}</td>
                 <td data-label="Status" class="status-{{ content.status.split()[0] }}">{{ content.status }}</td>
+                <td data-label="Image">
+                    {% if content.image_url %}
+                        <span>{% if content.status == 'Scheduled' %}Uploaded{% else %}Generated{% endif %}</span>
+                        <a href="#" onclick="viewImage('{{ content.image_url }}'); return false;">View</a>
+                        <a href="{{ url_for('change_image', content_id=content._id) }}">Change</a>
+                        <a href="{{ url_for('remove_image', content_id=content._id) }}" onclick="return confirm('Are you sure you want to remove this image?');">Remove</a>
+                    {% else %}
+                        <span>Will be generated</span>
+                    {% endif %}
+                </td>
                 <td data-label="LinkedIn Status">
                     <div class="platform-status">
                         {% if content.post_results and content.post_results.linkedin %}
@@ -258,6 +352,67 @@
                 }
             }
             logArea.scrollTop = logArea.scrollHeight;
+        }
+    </script>
+
+    <script>
+        function previewImage(input) {
+            var preview = document.getElementById('imagePreview');
+            preview.innerHTML = '';
+            if (input.files && input.files[0]) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.className = 'image-preview';
+                    preview.appendChild(img);
+                    var removeBtn = document.createElement('span');
+                    removeBtn.innerHTML = 'Remove';
+                    removeBtn.className = 'remove-image';
+                    removeBtn.onclick = function() {
+                        input.value = '';
+                        preview.innerHTML = '';
+                    };
+                    preview.appendChild(removeBtn);
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+    </script>
+
+    <!-- Add this modal for image preview -->
+    <div id="imageModal" class="modal">
+        <span class="close">&times;</span>
+        <img class="modal-content" id="modalImage">
+    </div>
+
+    <!-- Add this script at the end of the body -->
+    <script>
+        // Get the modal
+        var modal = document.getElementById("imageModal");
+
+        // Get the image and insert it inside the modal
+        var modalImg = document.getElementById("modalImage");
+
+        // Function to view the image
+        function viewImage(imageUrl) {
+            modal.style.display = "block";
+            modalImg.src = imageUrl;
+        }
+
+        // Get the <span> element that closes the modal
+        var span = document.getElementsByClassName("close")[0];
+
+        // When the user clicks on <span> (x), close the modal
+        span.onclick = function() {
+            modal.style.display = "none";
+        }
+
+        // When the user clicks anywhere outside of the modal, close it
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
         }
     </script>
 </body>

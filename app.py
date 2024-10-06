@@ -10,6 +10,9 @@ import requests
 from datetime import datetime, timedelta
 import pytz
 import sys
+import boto3
+from botocore.exceptions import NoCredentialsError
+import uuid
 
 # Load environment variables
 load_dotenv()
@@ -34,6 +37,27 @@ client = MongoClient(MONGO_URI)
 db = client['content_database']
 collection = db['posts']
 
+# DigitalOcean Spaces configuration
+s3 = boto3.client('s3',
+    endpoint_url=f"https://{os.environ.get('DIGITALOCEAN_SPACE_NAME')}",
+    aws_access_key_id=os.environ.get('DIGITALOCEAN_ACCESS_KEY_ID'),
+    aws_secret_access_key=os.environ.get('DIGITALOCEAN_SECRET_ACCESS_KEY')
+)
+
+def upload_to_digitalocean(file):
+    try:
+        file_name = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+        s3.upload_fileobj(
+            file,
+            os.environ.get('DIGITALOCEAN_BUCKET_NAME'),
+            file_name,
+            ExtraArgs={'ACL': 'public-read'}
+        )
+        return f"https://{os.environ.get('DIGITALOCEAN_BUCKET_NAME')}.{os.environ.get('DIGITALOCEAN_SPACE_NAME')}/{file_name}"
+    except NoCredentialsError:
+        logger.error("DigitalOcean credentials not available")
+        return None
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     logger.info("Accessing index route")
@@ -41,8 +65,13 @@ def index():
         text = request.form['text']
         logger.info(f"Received new post request: {text[:50]}...")
         
-        # Store the text as-is, without replacing newlines
-        text_to_store = text
+        # Check if an image was uploaded
+        image_url = None
+        if 'image' in request.files:
+            image = request.files['image']
+            if image.filename != '':
+                image_url = upload_to_digitalocean(image)
+                logger.info(f"Image uploaded to DigitalOcean: {image_url}")
         
         # Find the next available slot
         post_datetime = find_next_available_slot()
@@ -52,9 +81,10 @@ def index():
         
         # Insert content into MongoDB
         result = collection.insert_one({
-            'text': text_to_store,
+            'text': text,
             'scheduled_time': utc_datetime,
-            'status': 'Scheduled'  # Set initial status
+            'status': 'Scheduled',
+            'image_url': image_url  # Store the image URL if uploaded
         })
         logger.info(f"Inserted new post with ID: {result.inserted_id}")
         
@@ -87,11 +117,21 @@ def generate_and_post():
         return jsonify({'error': 'Content not found'}), 404
     
     try:
-        # Use the text as-is
         text = content['text']
-        logger.info(f"Generating image for content: {text[:50]}...")
-        image_url = generate_image(text)
-        logger.info(f"Image generated successfully: {image_url}")
+        image_url = content.get('image_url')
+        
+        if not image_url:
+            logger.info(f"Generating image for content: {text[:50]}...")
+            image_url = generate_image(text)
+            logger.info(f"Image generated successfully: {image_url}")
+            
+            # Update the content with the generated image URL
+            collection.update_one(
+                {'_id': ObjectId(content_id)},
+                {'$set': {'image_url': image_url}}
+            )
+        else:
+            logger.info(f"Using existing image: {image_url}")
 
         logger.info("Posting to LinkedIn...")
         linkedin_results = post_to_linkedin(text, image_url)
@@ -263,6 +303,31 @@ def find_next_available_slot(start_time=None):
                 logger.info(f"Next available slot found: {slot}")
                 return slot
         current_date += timedelta(days=1)
+
+@app.route('/change_image/<content_id>', methods=['GET', 'POST'])
+def change_image(content_id):
+    content = collection.find_one({'_id': ObjectId(content_id)})
+    if request.method == 'POST':
+        if 'image' in request.files:
+            image = request.files['image']
+            if image.filename != '':
+                image_url = upload_to_digitalocean(image)
+                collection.update_one(
+                    {'_id': ObjectId(content_id)},
+                    {'$set': {'image_url': image_url}}
+                )
+                logger.info(f"Image updated for content ID: {content_id}")
+        return redirect(url_for('index'))
+    return render_template('change_image.html', content=content)
+
+@app.route('/remove_image/<content_id>')
+def remove_image(content_id):
+    collection.update_one(
+        {'_id': ObjectId(content_id)},
+        {'$unset': {'image_url': ''}}
+    )
+    logger.info(f"Image removed for content ID: {content_id}")
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
