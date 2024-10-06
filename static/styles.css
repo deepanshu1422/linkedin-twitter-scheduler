@@ -70,3 +70,17 @@ th {
 tr:nth-child(even) {
     background-color: #f2f2f2;
 }
+
+.log-row {
+    background-color: #f9f9f9;
+}
+
+.log-area {
+    padding: 10px;
+    font-size: 0.9em;
+    color: #333;
+}
+
+.log-area p {
+    margin: 5px 0;
+}

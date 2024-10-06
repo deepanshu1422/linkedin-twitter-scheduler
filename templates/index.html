@@ -414,6 +414,11 @@
                     {% endif %}
                 </td>
             </tr>
+            <tr class="log-row" id="log-{{ content._id }}" style="display: none;">
+                <td colspan="7">
+                    <div class="log-area"></div>
+                </td>
+            </tr>
             {% endfor %}
         </tbody>
     </table>
@@ -423,7 +428,9 @@
 
     <script>
         function postNow(contentId) {
-            const logArea = document.getElementById('logArea');
+            const logRow = document.getElementById(`log-${contentId}`);
+            const logArea = logRow.querySelector('.log-area');
+            logRow.style.display = 'table-row';
             logArea.innerHTML = '<p>Posting process started...</p>';
             
             fetch('/generate_and_post', {
@@ -436,18 +443,25 @@
             .then(response => response.json())
             .then(data => {
                 console.log(data);
-                updateLogArea(data);
-                // Reload the page after posting
-                setTimeout(() => location.reload(), 3000);
+                updateLogArea(logArea, data);
+                // Hide the log row after 3 seconds
+                setTimeout(() => {
+                    logRow.style.display = 'none';
+                    // Reload the page after hiding the log
+                    location.reload();
+                }, 3000);
             })
             .catch((error) => {
                 console.error('Error:', error);
-                updateLogArea({error: 'An error occurred while posting.'});
+                updateLogArea(logArea, {error: 'An error occurred while posting.'});
+                // Hide the log row after 3 seconds
+                setTimeout(() => {
+                    logRow.style.display = 'none';
+                }, 3000);
             });
         }
 
-        function updateLogArea(data) {
-            const logArea = document.getElementById('logArea');
+        function updateLogArea(logArea, data) {
             if (data.error) {
                 logArea.innerHTML += `<p style="color: red;">Error: ${data.error}</p>`;
             } else {
@@ -469,7 +483,6 @@
                     });
                 }
             }
-            logArea.scrollTop = logArea.scrollHeight;
         }
     </script>
 
