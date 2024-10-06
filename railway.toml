@@ -6,4 +6,4 @@ startCommand = "gunicorn --bind 0.0.0.0:8080 app:app"
 
 [[cron]]
 schedule = "30 4,11,15 * * *"
-command = "python -c 'from app import process_scheduled_posts; process_scheduled_posts()'"
+command = "python cron_job.py"
