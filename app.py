@@ -238,6 +238,11 @@ def process_scheduled_posts():
         logger.info(f"Processed {len(results)} scheduled posts")
         return results
 
+@app.route('/trigger_cron', methods=['GET'])
+def trigger_cron():
+    results = process_scheduled_posts()
+    return jsonify(results)
+
 def find_next_available_slot():
     logger.info("Finding next available slot")
     ist = pytz.timezone('Asia/Kolkata')
