@@ -257,79 +257,78 @@ def edit_content(content_id):
 
 @app.route('/api/process_scheduled_posts', methods=['GET'])
 def process_scheduled_posts():
-    with app.app_context():
-        logger.info("Processing scheduled posts")
-        ist = pytz.timezone('Asia/Kolkata')
-        now = datetime.now(ist)
-        
-        # Find posts scheduled for the current time or earlier
-        logger.info(f"Searching for posts scheduled up to {now} IST")
-        scheduled_posts = collection.find({
-            'scheduled_time': {'$lte': now.astimezone(pytz.UTC)},
-            'status': 'Scheduled'  # Only process posts that are still scheduled
-        })
-        
-        results = []
-        for post in scheduled_posts:
-            logger.info(f"Processing post: {post['_id']}")
-            try:
-                # Use the text as-is
-                text = post['text']
-                logger.info(f"Generating image for post: {text[:50]}...")
-                image_url = generate_image(text)
-                logger.info(f"Image generated: {image_url}")
+    logger.info("Processing scheduled posts")
+    ist = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(ist)
+    
+    # Find posts scheduled for the current time or earlier
+    logger.info(f"Searching for posts scheduled up to {now} IST")
+    scheduled_posts = collection.find({
+        'scheduled_time': {'$lte': now.astimezone(pytz.UTC)},
+        'status': 'Scheduled'  # Only process posts that are still scheduled
+    })
+    
+    results = []
+    for post in scheduled_posts:
+        logger.info(f"Processing post: {post['_id']}")
+        try:
+            text = post['text']
+            logger.info(f"Generating image for post: {text[:50]}...")
+            image_url = generate_image(text)
+            logger.info(f"Image generated: {image_url}")
 
-                logger.info("Posting to LinkedIn...")
-                linkedin_results = post_to_linkedin(text, image_url)
-                logger.info(f"LinkedIn results: {linkedin_results}")
+            logger.info("Posting to LinkedIn...")
+            linkedin_results = post_to_linkedin(text, image_url)
+            logger.info(f"LinkedIn results: {linkedin_results}")
 
-                logger.info("Posting to Twitter...")
-                twitter_results = post_to_twitter(text, image_url)
-                logger.info(f"Twitter results: {twitter_results}")
-                
-                # Prepare detailed status information
-                linkedin_status = {f"account_{i+1}": "Success" if 'id' in result else "Error" for i, result in enumerate(linkedin_results)}
-                twitter_status = {f"account_{i+1}": "Success" if 'tweet_id' in result else "Error" for i, result in enumerate(twitter_results)}
-                
-                overall_status = 'Partial Success' if any(status == 'Success' for status in linkedin_status.values() + twitter_status.values()) else 'Error'
-                if all(status == 'Success' for status in linkedin_status.values() + twitter_status.values()):
-                    overall_status = 'Success'
-                
-                # Update the post status
-                update_result = collection.update_one(
-                    {'_id': post['_id']},
-                    {'$set': {
-                        'status': overall_status,
-                        'post_results': {
-                            'linkedin': linkedin_status,
-                            'twitter': twitter_status,
-                            'image_url': image_url
-                        }
-                    }}
-                )
-                logger.info(f"Post status updated. Update result: {update_result.modified_count} document(s) modified")
-                
-                results.append({
-                    'post_id': str(post['_id']),
+            logger.info("Posting to Twitter...")
+            twitter_results = post_to_twitter(text, image_url)
+            logger.info(f"Twitter results: {twitter_results}")
+            
+            # Prepare detailed status information
+            linkedin_status = {f"account_{i+1}": "Success" if result.get('id') else "Error" for i, result in enumerate(linkedin_results)}
+            twitter_status = {f"account_{i+1}": "Success" if result.get('tweet_id') else "Error" for i, result in enumerate(twitter_results)}
+            
+            all_statuses = list(linkedin_status.values()) + list(twitter_status.values())
+            overall_status = 'Partial Success' if any(status == 'Success' for status in all_statuses) else 'Error'
+            if all(status == 'Success' for status in all_statuses):
+                overall_status = 'Success'
+            
+            # Update the post status
+            update_result = collection.update_one(
+                {'_id': post['_id']},
+                {'$set': {
                     'status': overall_status,
-                    'linkedin': linkedin_status,
-                    'twitter': twitter_status
-                })
-            except Exception as e:
-                logger.error(f"Error processing scheduled post {post['_id']}: {str(e)}", exc_info=True)
-                # Update the post status to indicate an error
-                collection.update_one(
-                    {'_id': post['_id']},
-                    {'$set': {'status': 'Error'}}
-                )
-                results.append({
-                    'post_id': str(post['_id']),
-                    'status': 'Error',
-                    'error': str(e)
-                })
-        
-        logger.info(f"Processed {len(results)} scheduled posts")
-        return results
+                    'post_results': {
+                        'linkedin': linkedin_status,
+                        'twitter': twitter_status,
+                        'image_url': image_url
+                    }
+                }}
+            )
+            logger.info(f"Post status updated. Update result: {update_result.modified_count} document(s) modified")
+            
+            results.append({
+                'post_id': str(post['_id']),
+                'status': overall_status,
+                'linkedin': linkedin_status,
+                'twitter': twitter_status
+            })
+        except Exception as e:
+            logger.error(f"Error processing scheduled post {post['_id']}: {str(e)}", exc_info=True)
+            # Update the post status to indicate an error
+            collection.update_one(
+                {'_id': post['_id']},
+                {'$set': {'status': 'Error'}}
+            )
+            results.append({
+                'post_id': str(post['_id']),
+                'status': 'Error',
+                'error': str(e)
+            })
+    
+    logger.info(f"Processed {len(results)} scheduled posts")
+    return results
 
 @app.route('/trigger_cron', methods=['GET'])
 def trigger_cron():
