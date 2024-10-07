@@ -409,6 +409,19 @@ def regenerate_image(content_id):
         logger.error(f"Error regenerating image: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/run-cron', methods=['GET'])
+def run_cron():
+    # Verify the request using a secret key
+    secret_key = request.args.get('key')
+    if secret_key != os.environ.get('CRON_SECRET_KEY'):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        results = process_scheduled_posts()
+        return jsonify({"message": "Cron job completed", "results": results})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
