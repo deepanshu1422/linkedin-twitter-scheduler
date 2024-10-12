@@ -85,12 +85,18 @@ def index():
         post_datetime = find_next_available_slot()
         utc_datetime = post_datetime.astimezone(pytz.UTC)
         
+        # Get user options
+        post_for_deepanshu = 'post_for_deepanshu' in request.form
+        post_for_aryan = 'post_for_aryan' in request.form
+        
         result = collection.insert_one({
             'text': text,
             'scheduled_time': utc_datetime,
             'status': 'Scheduled',
             'image_url': image_url,
-            'image_prompt': image_prompt
+            'image_prompt': image_prompt,
+            'post_for_deepanshu': post_for_deepanshu,
+            'post_for_aryan': post_for_aryan
         })
         logger.info(f"Inserted new post with ID: {result.inserted_id}")
         
@@ -167,12 +173,26 @@ def generate_and_post():
         else:
             logger.info(f"Using existing image: {image_url}")
 
-        logger.info("Posting to LinkedIn...")
-        linkedin_results = post_to_linkedin(plain_text, image_url)
-        logger.info(f"LinkedIn post results: {linkedin_results}")
+        # Get user options
+        post_for_deepanshu = content.get('post_for_deepanshu', True)
+        post_for_aryan = content.get('post_for_aryan', True)
 
-        logger.info("Posting to Twitter...")
-        twitter_results = post_to_twitter(plain_text, image_url)
+        linkedin_results = []
+        twitter_results = []
+
+        if post_for_deepanshu:
+            logger.info("Posting to LinkedIn (Deepanshu)...")
+            linkedin_results.append(post_to_linkedin(plain_text, image_url, user=1))
+            logger.info("Posting to Twitter (Deepanshu)...")
+            twitter_results.append(post_to_twitter(plain_text, image_url, user=1))
+
+        if post_for_aryan:
+            logger.info("Posting to LinkedIn (Aryan)...")
+            linkedin_results.append(post_to_linkedin(plain_text, image_url, user=2))
+            logger.info("Posting to Twitter (Aryan)...")
+            twitter_results.append(post_to_twitter(plain_text, image_url, user=2))
+
+        logger.info(f"LinkedIn post results: {linkedin_results}")
         logger.info(f"Twitter post results: {twitter_results}")
         
         # Prepare detailed status information
