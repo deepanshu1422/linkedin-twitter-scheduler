@@ -441,6 +441,17 @@ def run_cron():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/ads', methods=['GET'])
+def index2():
+    return render_template('index2.html')
+
+@app.route('/skool', methods=['GET'])
+def skool():
+    return render_template('skool.html')
+
+
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)

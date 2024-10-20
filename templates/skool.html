@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skool Revenue Calculator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles2.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Skool Revenue Calculator</h1>
+        <div class="sliders">
+            <label for="revenue">Total Revenue ($): <span id="revenueValue">100000</span></label>
+            <input type="range" id="revenue" name="revenue" min="0" max="1000000" step="1000" value="100000" data-zoom="true">
+            
+            <label for="transactions">Number of Transactions: <span id="transactionsValue">1010</span></label>
+            <input type="range" id="transactions" name="transactions" min="0" max="10000" step="1" value="1010" data-zoom="true">
+            
+            <label for="transactionValue">Transaction Value ($): <span id="transactionValueValue">99</span></label>
+            <input type="range" id="transactionValue" name="transactionValue" min="1" max="1000" step="1" value="99" data-zoom="true">
+        </div>
+        
+        <div id="results" class="hidden">
+            <div class="results-container">
+                <div class="chart-container">
+                    <h2>Revenue Breakdown</h2>
+                    <canvas id="revenueChart"></canvas>
+                </div>
+                <div class="table-container">
+                    <h2>Results</h2>
+                    <table id="resultsTable"></table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='skool_script.js') }}"></script>
+</body>
+</html>
